@@ -1,6 +1,8 @@
 # encoding: utf-8
 
 import csv
+import time
+import datetime
 
 from collections import defaultdict
 
@@ -145,6 +147,7 @@ def getNum(event, attr):
 # атрибуты для team_statistics
 event_num                          = 'event_num'                    # номер игры для конкретной команды
 team_score                         = 'team_score'                   # набранных очков в чемпионате
+last_game_timestamp                = 'last_game_timestamp'          # когда была сыгранна последняя игра
 first_period_scored                = 'first_period_scored'
 second_period_scored               = 'second_period_scored'
 third_period_scored                = 'third_period_scored'
@@ -188,6 +191,7 @@ def processEvent(event):
     team2Id = int(teamToId[get(event, team2Name)]) - 1
 
     print("Process event: id = ", get(event, id))
+
     _scored = get(event, score)
     scored = _scored.split(u'\xa0')
     overtime_was = False
@@ -212,8 +216,12 @@ def processEvent(event):
     team1WonGame = team1P1Scored + team1P2Scored + team1P3Scored + team1OvScored + team1Bullits > team2P1Scored \
                    + team2P2Scored + team2P3Scored + team2OvScored + team2Bullits
 
+    # дата последней сыгранной игры
+    cur_date = datetime.datetime.strptime(get(event, timestamp), "%d.%m.%Y")
+
     min_games_threshold = 3 # или 5, но др варианты плохие однозначно
-    # при векторизации не учитываются игры, в которых каждая команда сыграла не менее 3х раз
+
+    # при векторизации не учитываются игры, в которых каждая команда сыграла не менее min_games_threshold раз
     # статистические показателя суммируются для данной игры после создания вектора
     if team_statistics[team1Id][event_num] >= min_games_threshold and team_statistics[team2Id][event_num] >= min_games_threshold:
         y = []
@@ -243,14 +251,15 @@ def processEvent(event):
 
         # процент успешных игр в большинстве
         powerplayPercentageTeam1 = team_statistics[team1Id][powerplayScoredTimes] / team_statistics[team1Id][powerplayTimes]
+        powerplayPercentageTeam2 = team_statistics[team2Id][powerplayScoredTimes] / team_statistics[team2Id][powerplayTimes]
+        vector.append(powerplayPercentageTeam1 - powerplayPercentageTeam2)
 
         # процент успешности при игре в меньшинстве
         penaltyKillSuccessRateTeam1 = 1 - team_statistics[team1Id][penaltykillAgainstTimes] / team_statistics[team1Id][penaltykillTimes]
         penaltyKillSuccessRateTeam2 = 1 - team_statistics[team2Id][penaltykillAgainstTimes] / team_statistics[team2Id][penaltykillTimes]
         vector.append(penaltyKillSuccessRateTeam1 - penaltyKillSuccessRateTeam2)
 
-        # процент реализованных броскво в створ
-        # !!! добавить броски в овертайме
+        # процент реализованных бросков в створ
         shotOnTargetTeam1 = team_statistics[team1Id][shotsOnGoalPeriod1] + team_statistics[team1Id][shotsOnGoalPeriod2] \
                             + team_statistics[team1Id][shotsOnGoalPeriod3] + team_statistics[team1Id][shotsOnGoalOvertime]
         shotOnTargetTeam2 = team_statistics[team2Id][shotsOnGoalPeriod1] + team_statistics[team2Id][shotsOnGoalPeriod2] \
@@ -258,14 +267,11 @@ def processEvent(event):
         shotPercentageTeam1 = scoredTeam1 / shotOnTargetTeam1
         shotPercentageTeam2 = scoredTeam2 / shotOnTargetTeam2
         vector.append(shotPercentageTeam1 - shotPercentageTeam2)
-        print(shotPercentageTeam1 * 100, shotPercentageTeam2 * 100)
 
         # процент отбитых бросков в створ вратеря
         savePercentageTeam1 = 1 - againstTeam1 / team_statistics[team1Id][shotsOnGoalAgainst]
         savePercentageTeam2 = 1 - againstTeam2 / team_statistics[team2Id][shotsOnGoalAgainst]
         vector.append(savePercentageTeam1 - savePercentageTeam2)
-        print(againstTeam1, team_statistics[team1Id][shotsOnGoalAgainst], againstTeam2, team_statistics[team2Id][shotsOnGoalAgainst])
-        print(savePercentageTeam1 * 100, savePercentageTeam2 * 100)
 
         # Число побед подряд
         vector.append(team_statistics[team1Id][winning_strike] - team_statistics[team2Id][winning_strike])
@@ -273,38 +279,44 @@ def processEvent(event):
         # Разница набранных очков в чемпионате
         vector.append(team_statistics[team1Id][team_score] - team_statistics[team2Id][team_score])
 
+        # Отношение забитых и пропущенных шайб при игре 5 на 5
         ration5vs5Team1 = team_statistics[team1Id][scored5vs5] / team_statistics[team1Id][against5vs5]
         ration5vs5Team2 = team_statistics[team2Id][scored5vs5] / team_statistics[team2Id][against5vs5]
         vector.append(ration5vs5Team1 - ration5vs5Team2)
 
-        vector.append(savePercentageTeam1 + shotPercentageTeam1 - shotPercentageTeam2 - savePercentageTeam2) # PDO
+        # PDO
+        vector.append(savePercentageTeam1 + shotPercentageTeam1 - shotPercentageTeam2 - savePercentageTeam2)
 
+        # Fenwick
+        # Сделать Fenwick % Остальных команд
         shotsTeam1 = team_statistics[team1Id][shotsPeriod1] + team_statistics[team1Id][shotsPeriod2] + team_statistics[team1Id][shotsPeriod3]
         shotsTeam2 = team_statistics[team2Id][shotsPeriod1] + team_statistics[team2Id][shotsPeriod2] + team_statistics[team2Id][shotsPeriod3]
-        vector.append(shotsTeam1 - shotsTeam2) # Fenwick
+        vector.append(shotsTeam1 - shotsTeam2)
 
-        #shotsOnGoalTeam1 = team_statistics[team1Id][shotsOnGoalPeriod1] + team_statistics[team1Id][shotsOnGoalPeriod2] + team_statistics[team1Id][shotsOnGoalPeriod3]
-        #shotsOnGoalTeam2 = team_statistics[team2Id][shotsOnGoalPeriod1] + team_statistics[team2Id][shotsOnGoalPeriod2] + team_statistics[team2Id][shotsOnGoalPeriod3]
-        #vector.append(shotsOnGoalTeam1 - shotsOnGoalTeam2)
+        # дней отдыхали
+        restDaysTeam1 = (cur_date - team_statistics[team1Id][last_game_timestamp]).days
+        restDaysTeam2 = (cur_date - team_statistics[team2Id][last_game_timestamp]).days
+        vector.append(restDaysTeam1 - restDaysTeam2)
 
-        #blockedShotsTeam1 = team_statistics[team1Id][blockedShotsPeriod1] + team_statistics[team1Id][blockedShotsPeriod2] + team_statistics[team1Id][blockedShotsPeriod3]
-        #blockedShotsTeam2 = team_statistics[team2Id][blockedShotsPeriod1] + team_statistics[team2Id][blockedShotsPeriod2] + team_statistics[team2Id][blockedShotsPeriod3]
-        #vector.append(blockedShotsTeam2 - blockedShotsTeam1)
+        # блокированные броски без учета овертайма т.к. там играют 4 на 4
+        blockedShotsTeam1 = team_statistics[team1Id][blockedShotsPeriod1] + team_statistics[team1Id][blockedShotsPeriod2] + team_statistics[team1Id][blockedShotsPeriod3]
+        blockedShotsTeam2 = team_statistics[team2Id][blockedShotsPeriod1] + team_statistics[team2Id][blockedShotsPeriod2] + team_statistics[team2Id][blockedShotsPeriod3]
+        vector.append(blockedShotsTeam1 - blockedShotsTeam2)
 
-        #hitsTeam1 = team_statistics[team1Id][hitsPeriod1] + team_statistics[team1Id][hitsPeriod2] + team_statistics[team1Id][hitsPeriod3]
-        #hitsTeam2 = team_statistics[team2Id][hitsPeriod1] + team_statistics[team2Id][hitsPeriod2] + team_statistics[team2Id][hitsPeriod3]
-        #vector.append(hitsTeam1 - hitsTeam2)
+        # силовые приёмы без учета овертайма т.к. там играют аккуратнее (из-за того, что до 1го гола и 4 на 4, легче убежать в атаку)
+        hitsTeam1 = team_statistics[team1Id][hitsPeriod1] + team_statistics[team1Id][hitsPeriod2] + team_statistics[team1Id][hitsPeriod3]
+        hitsTeam2 = team_statistics[team2Id][hitsPeriod1] + team_statistics[team2Id][hitsPeriod2] + team_statistics[team2Id][hitsPeriod3]
+        vector.append(hitsTeam1 - hitsTeam2)
 
-        # под сомнением т.к. может быть большая разница очень
-        #faceoffsWonTeam1 = team_statistics[team1Id][faceoffsWonPeriod1] + team_statistics[team1Id][faceoffsWonPeriod2] + team_statistics[team1Id][faceoffsWonPeriod3]
-        #faceoffsWonTeam2 = team_statistics[team2Id][faceoffsWonPeriod1] + team_statistics[team2Id][faceoffsWonPeriod2] + team_statistics[team2Id][faceoffsWonPeriod3]
-        #vector.append(faceoffsWonTeam1 - faceoffsWonTeam2)
+        # считай лучше процент выигранных вбрасываний
+        faceoffsWonTeam1 = team_statistics[team1Id][faceoffsWonPeriod1] + team_statistics[team1Id][faceoffsWonPeriod2] + team_statistics[team1Id][faceoffsWonPeriod3]
+        faceoffsWonTeam2 = team_statistics[team2Id][faceoffsWonPeriod1] + team_statistics[team2Id][faceoffsWonPeriod2] + team_statistics[team2Id][faceoffsWonPeriod3]
+        vector.append(faceoffsWonTeam1 - faceoffsWonTeam2)
 
         z = vector + y
         with open(vectors, 'a') as csvfile:
             vectrowriter = csv.writer(csvfile, delimiter = ',', quotechar = '|', quoting=csv.QUOTE_MINIMAL)
             vectrowriter.writerow(z)
-        # С И БЕЗ ADVANCED попробовать
 
     team_statistics[team1Id][event_num] += 1
     team_statistics[team2Id][event_num] += 1
@@ -326,10 +338,10 @@ def processEvent(event):
          else:
             team_statistics[team2Id][team_score] += 3
 
-    # ОТДЫХ добавиь в отдельную версию, для этого можно хранить last timestamp в teamstatistics
-    # добавляй сразу в ту, что с advanced
+    team_statistics[team1Id][last_game_timestamp] = cur_date
+    team_statistics[team2Id][last_game_timestamp] = cur_date
 
-    # scored / against
+    # scored & against
     # 1p
     team_statistics[team1Id][first_period_scored]   += team1P1Scored
     team_statistics[team2Id][first_period_scored]   += team2P1Scored
@@ -351,6 +363,8 @@ def processEvent(event):
     team_statistics[team1Id][overtime_against]      += team2OvScored
     team_statistics[team2Id][overtime_against]      += team1OvScored
 
+
+    # shots
     team_statistics[team1Id][shotsPeriod1] += getNum(event, shotsPeriod1Team1)
     team_statistics[team2Id][shotsPeriod1] += getNum(event, shotsPeriod1Team2)
     team_statistics[team1Id][shotsPeriod2] += getNum(event, shotsPeriod2Team1)
@@ -358,19 +372,21 @@ def processEvent(event):
     team_statistics[team1Id][shotsPeriod3] += getNum(event, shotsPeriod3Team1)
     team_statistics[team2Id][shotsPeriod3] += getNum(event, shotsPeriod3Team2)
 
-    team_statistics[team1Id][shotsOnGoalPeriod1] += getNum(event, shotsOnGoalPeriod1Team1)
-    team_statistics[team2Id][shotsOnGoalPeriod1] += getNum(event, shotsOnGoalPeriod1Team2)
-    team_statistics[team1Id][shotsOnGoalPeriod2] += getNum(event, shotsOnGoalPeriod2Team1)
-    team_statistics[team2Id][shotsOnGoalPeriod2] += getNum(event, shotsOnGoalPeriod2Team2)
-    team_statistics[team1Id][shotsOnGoalPeriod3] += getNum(event, shotsOnGoalPeriod3Team1)
-    team_statistics[team2Id][shotsOnGoalPeriod3] += getNum(event, shotsOnGoalPeriod3Team2)
+    # shots on goal
+    team_statistics[team1Id][shotsOnGoalPeriod1]  += getNum(event, shotsOnGoalPeriod1Team1)
+    team_statistics[team2Id][shotsOnGoalPeriod1]  += getNum(event, shotsOnGoalPeriod1Team2)
+    team_statistics[team1Id][shotsOnGoalPeriod2]  += getNum(event, shotsOnGoalPeriod2Team1)
+    team_statistics[team2Id][shotsOnGoalPeriod2]  += getNum(event, shotsOnGoalPeriod2Team2)
+    team_statistics[team1Id][shotsOnGoalPeriod3]  += getNum(event, shotsOnGoalPeriod3Team1)
+    team_statistics[team2Id][shotsOnGoalPeriod3]  += getNum(event, shotsOnGoalPeriod3Team2)
     team_statistics[team1Id][shotsOnGoalOvertime] += getNum(event, shotsOnGoalOvertimeTeam1)
-    team_statistics[team1Id][shotsOnGoalOvertime] += getNum(event, shotsOnGoalOvertimeTeam2)
-    team_statistics[team1Id][shotsOnGoalAgainst] += getNum(event, shotsPeriod1Team2) + getNum(event, shotsPeriod2Team2) \
-                                                    + getNum(event, shotsPeriod3Team2) + getNum(event, shotsOnGoalOvertimeTeam2)
-    team_statistics[team2Id][shotsOnGoalAgainst] += getNum(event, shotsPeriod1Team1) + getNum(event, shotsPeriod2Team1) \
-                                                    + getNum(event, shotsPeriod3Team1) + getNum(event, shotsOnGoalOvertimeTeam1)
+    team_statistics[team2Id][shotsOnGoalOvertime] += getNum(event, shotsOnGoalOvertimeTeam2)
+    team_statistics[team1Id][shotsOnGoalAgainst]  += getNum(event, shotsPeriod1Team2) + getNum(event, shotsPeriod2Team2) \
+                                                     + getNum(event, shotsPeriod3Team2) + getNum(event, shotsOnGoalOvertimeTeam2)
+    team_statistics[team2Id][shotsOnGoalAgainst]  += getNum(event, shotsPeriod1Team1) + getNum(event, shotsPeriod2Team1) \
+                                                     + getNum(event, shotsPeriod3Team1) + getNum(event, shotsOnGoalOvertimeTeam1)
 
+    # blocked shots
     team_statistics[team1Id][blockedShotsPeriod1] += getNum(event, blockedShotsPeriod1Team1)
     team_statistics[team2Id][blockedShotsPeriod1] += getNum(event, blockedShotsPeriod1Team2)
     team_statistics[team1Id][blockedShotsPeriod2] += getNum(event, blockedShotsPeriod2Team1)
@@ -378,6 +394,7 @@ def processEvent(event):
     team_statistics[team1Id][blockedShotsPeriod3] += getNum(event, blockedShotsPeriod3Team1)
     team_statistics[team2Id][blockedShotsPeriod3] += getNum(event, blockedShotsPeriod3Team2)
 
+    # силовые приемы
     team_statistics[team1Id][hitsPeriod1] += getNum(event, hitsPeriod1Team1)
     team_statistics[team2Id][hitsPeriod1] += getNum(event, hitsPeriod1Team2)
     team_statistics[team1Id][hitsPeriod2] += getNum(event, hitsPeriod2Team1)
@@ -385,6 +402,7 @@ def processEvent(event):
     team_statistics[team1Id][hitsPeriod3] += getNum(event, hitsPeriod3Team1)
     team_statistics[team2Id][hitsPeriod3] += getNum(event, hitsPeriod3Team2)
 
+    # вбрасывания
     team_statistics[team1Id][faceoffsWonPeriod1] += getNum(event, faceoffsWonPeriod1Team1)
     team_statistics[team2Id][faceoffsWonPeriod1] += getNum(event, faceoffsWonPeriod1Team2)
     team_statistics[team1Id][faceoffsWonPeriod2] += getNum(event, faceoffsWonPeriod2Team1)
@@ -392,16 +410,19 @@ def processEvent(event):
     team_statistics[team1Id][faceoffsWonPeriod3] += getNum(event, faceoffsWonPeriod3Team1)
     team_statistics[team2Id][faceoffsWonPeriod3] += getNum(event, faceoffsWonPeriod3Team2)
 
+    # игра в большинстве
     team_statistics[team1Id][powerplayTimes] += getNum(event, powerplayTimesTeam1)
     team_statistics[team2Id][powerplayTimes] += getNum(event, powerplayTimesTeam2)
     team_statistics[team1Id][powerplayScoredTimes] += getNum(event, powerplayScoredTimesTeam1)
     team_statistics[team2Id][powerplayScoredTimes] += getNum(event, powerplayScoredTimesTeam2)
 
+    # игра в меньшинстве
     team_statistics[team1Id][penaltykillTimes] += getNum(event, penaltykillTimesTeam1)
     team_statistics[team2Id][penaltykillTimes] += getNum(event, penaltykillTimesTeam2)
     team_statistics[team1Id][penaltykillAgainstTimes] += getNum(event, penaltykillAgainstTimesTeam1)
     team_statistics[team2Id][penaltykillAgainstTimes] += getNum(event, penaltykillAgainstTimesTeam2)
 
+    # забитые & пропущенные при игре 5 на 5
     team_statistics[team1Id][scored5vs5] += getNum(event, scored5vs5Team1)
     team_statistics[team2Id][scored5vs5] += getNum(event, scored5vs5Team2)
     team_statistics[team1Id][against5vs5] += getNum(event, against5vs5Team1)
