@@ -127,11 +127,20 @@ def loadTeamToIdDict():
     teamToId = {}
     with open(idToTeam_filename, newline='\n', encoding='utf-8') as csvfile:
         teamsreader =  csv.reader(csvfile, delimiter = ',', quotechar = '"')
-        for row in teamsreader: # id, teamName
+        for row in teamsreader: # id, teamName, conf
             teamToId[row[1]] = row[0]
     return teamToId
 
+def loadIdToConfDict():
+    idToConf = {}
+    with open(idToTeam_filename, newline='\n', encoding='utf-8') as csvfile:
+        teamsreader =  csv.reader(csvfile, delimiter = ',', quotechar = '"')
+        for row in teamsreader: # id, teamName, conf
+            idToConf[int(row[0]) - 1] = row[2]
+    return idToConf
+
 teamToId = loadTeamToIdDict()
+idToConf = loadIdToConfDict()
 
 team_statistics = [] # аккумулируемая статистика по командам (т.е. показатели после каждого матча складываются)
 
@@ -158,9 +167,12 @@ third_period_against               = 'third_period_against'
 overtime_against                   = 'overtime_against'
 shotsOnGoalAgainst                 = 'shotsOnGoalAgainst'           # сколько нанесли ударов в стров ворот данной команде
 winning_strike                     = 'winning_strike'               # число побед подряд
-shotsPeriod1                       = 'shotsPeriod1Team'
-shotsPeriod2                       = 'shotsPeriod2Team'
-shotsPeriod3                       = 'shotsPeriod3Team'
+fenwikPeriod1                      = 'fenwikPeriod1'                # сколько всего бросков не блокированных (в створ + мимо - блокированные)
+fenwikPeriod1Against               = 'fenwikPeriod1Against'         # сколько бросков не блокированных  нанесли по воротам данной команды
+fenwikPeriod2                      = 'fenwikPeriod2'
+fenwikPeriod2Against               = 'fenwikPeriod2Against'
+fenwikPeriod3                      = 'fenwikPeriod3'
+fenwikPeriod3Against               = 'fenwikPeriod3Against'
 shotsOnGoalPeriod1                 = 'shotsOnGoalPeriod1Team'
 shotsOnGoalPeriod2                 = 'shotsOnGoalPeriod2Team'
 shotsOnGoalPeriod3                 = 'shotsOnGoalPeriod3Team'
@@ -171,15 +183,18 @@ blockedShotsPeriod3                = 'blockedShotsPeriod3Team'
 hitsPeriod1                        = 'hitsPeriod1Team'
 hitsPeriod2                        = 'hitsPeriod2Team'
 hitsPeriod3                        = 'hitsPeriod3Team'
-faceoffsWonPeriod1                 = 'faceoffsWonPeriod1Team'
-faceoffsWonPeriod2                 = 'faceoffsWonPeriod2Team'
-faceoffsWonPeriod3                 = 'faceoffsWonPeriod3Team'
+faceoffsWon                        = 'faceoffsWon'
+faceoffsLose                       = 'faceoffsLose'
 powerplayTimes                     = 'powerplayTimesTeam'
 powerplayScoredTimes               = 'powerplayScoredTimesTeam'
 penaltykillTimes                   = 'penaltykillTimesTeam'
 penaltykillAgainstTimes            = 'penaltykillAgainstTimesTeam'
 scored5vs5                         = 'scored5vs5Team'
 against5vs5                        = 'against5vs5Team'
+homeWin                            = 'homeWin'                      # количество выигранных дома игр
+homeLose                           = 'homeLose'                     # количество проигранных дома игр
+awayWin                            = 'awayWin'
+awayLose                           = 'awayLose'
 
 # метки для вектора
 WIN_HOME = 'WinHome'
@@ -277,7 +292,21 @@ def processEvent(event):
         vector.append(team_statistics[team1Id][winning_strike] - team_statistics[team2Id][winning_strike])
 
         # Разница набранных очков в чемпионате
-        vector.append(team_statistics[team1Id][team_score] - team_statistics[team2Id][team_score])
+        #vector.append(team_statistics[team1Id][team_score] - team_statistics[team2Id][team_score])
+
+        team1Score = int(team_statistics[team1Id][team_score])
+        team1Conf = idToConf[team1Id]
+        team2Score = int(team_statistics[team2Id][team_score])
+        team2Conf = idToConf[team2Id]
+        team1Place = 1
+        team2Place = 1
+        # определяем приблизительное место в конференции (по очкам; места в дивизионах не учитываются)
+        for _teamName in teamToId:
+            if team1Conf == idToConf[int(teamToId[_teamName]) - 1] and  int(team_statistics[int(teamToId[_teamName]) - 1][team_score]) > team1Score:
+                team1Place += 1
+            if team2Conf == idToConf[int(teamToId[_teamName]) - 1] and int(team_statistics[int(teamToId[_teamName]) - 1][team_score]) > team2Score:
+                team2Place += 1
+        vector.append(team1Place - team2Place)
 
         # Отношение забитых и пропущенных шайб при игре 5 на 5
         ration5vs5Team1 = team_statistics[team1Id][scored5vs5] / team_statistics[team1Id][against5vs5]
@@ -289,28 +318,35 @@ def processEvent(event):
 
         # Fenwick
         # Сделать Fenwick % Остальных команд
-        shotsTeam1 = team_statistics[team1Id][shotsPeriod1] + team_statistics[team1Id][shotsPeriod2] + team_statistics[team1Id][shotsPeriod3]
-        shotsTeam2 = team_statistics[team2Id][shotsPeriod1] + team_statistics[team2Id][shotsPeriod2] + team_statistics[team2Id][shotsPeriod3]
-        vector.append(shotsTeam1 - shotsTeam2)
+        fenwikTeam1         = team_statistics[team1Id][fenwikPeriod1] + team_statistics[team1Id][fenwikPeriod2] + team_statistics[team1Id][fenwikPeriod3] #\
+        fenwikTeam1Opposite = team_statistics[team1Id][fenwikPeriod1Against] + team_statistics[team1Id][fenwikPeriod2Against] + team_statistics[team1Id][fenwikPeriod3Against]
+        fenwikCloseTeam1 = fenwikTeam1 / (fenwikTeam1 + fenwikTeam1Opposite)
+        fenwikTeam2         = team_statistics[team2Id][fenwikPeriod1] + team_statistics[team2Id][fenwikPeriod2] + team_statistics[team2Id][fenwikPeriod3]
+        fenwikTeam2Opposite = team_statistics[team2Id][fenwikPeriod1Against] + team_statistics[team2Id][fenwikPeriod2Against] + team_statistics[team2Id][fenwikPeriod3Against]
+        fenwikCloseTeam2 = fenwikTeam2 / (fenwikTeam2 + fenwikTeam2Opposite)
+        vector.append(fenwikCloseTeam1 - fenwikCloseTeam2)
 
         # дней отдыхали
         restDaysTeam1 = (cur_date - team_statistics[team1Id][last_game_timestamp]).days
         restDaysTeam2 = (cur_date - team_statistics[team2Id][last_game_timestamp]).days
         vector.append(restDaysTeam1 - restDaysTeam2)
 
-        # блокированные броски без учета овертайма т.к. там играют 4 на 4
-        blockedShotsTeam1 = team_statistics[team1Id][blockedShotsPeriod1] + team_statistics[team1Id][blockedShotsPeriod2] + team_statistics[team1Id][blockedShotsPeriod3]
-        blockedShotsTeam2 = team_statistics[team2Id][blockedShotsPeriod1] + team_statistics[team2Id][blockedShotsPeriod2] + team_statistics[team2Id][blockedShotsPeriod3]
-        vector.append(blockedShotsTeam1 - blockedShotsTeam2)
-
         # силовые приёмы без учета овертайма т.к. там играют аккуратнее (из-за того, что до 1го гола и 4 на 4, легче убежать в атаку)
         hitsTeam1 = team_statistics[team1Id][hitsPeriod1] + team_statistics[team1Id][hitsPeriod2] + team_statistics[team1Id][hitsPeriod3]
         hitsTeam2 = team_statistics[team2Id][hitsPeriod1] + team_statistics[team2Id][hitsPeriod2] + team_statistics[team2Id][hitsPeriod3]
         vector.append(hitsTeam1 - hitsTeam2)
 
-        # считай лучше процент выигранных вбрасываний
-        faceoffsWonTeam1 = team_statistics[team1Id][faceoffsWonPeriod1] + team_statistics[team1Id][faceoffsWonPeriod2] + team_statistics[team1Id][faceoffsWonPeriod3]
-        faceoffsWonTeam2 = team_statistics[team2Id][faceoffsWonPeriod1] + team_statistics[team2Id][faceoffsWonPeriod2] + team_statistics[team2Id][faceoffsWonPeriod3]
+        # процент выигранных дома игр первой команды комбинируем с процентом выигранных игр в гостях второй(гостевой) команды
+        if team_statistics[team1Id][homeWin] + team_statistics[team1Id][homeLose] == 0 or team_statistics[team2Id][awayWin] + team_statistics[team2Id][awayLose] == 0:
+            vector.append(0) # будет считать равным проценты побед, если команда(ы) ещё не играли дома/в гостях
+        else:
+            homeWinTeam1 = team_statistics[team1Id][homeWin] / (team_statistics[team1Id][homeWin] + team_statistics[team1Id][homeLose])
+            awayWinTeam2 = team_statistics[team2Id][awayWin] / (team_statistics[team2Id][awayWin] + team_statistics[team2Id][awayLose])
+            vector.append(homeWinTeam1 - awayWinTeam2)
+
+        # процент выигранных вбрасываний
+        faceoffsWonTeam1 = team_statistics[team1Id][faceoffsWon] / (team_statistics[team1Id][faceoffsWon] + team_statistics[team1Id][faceoffsLose])
+        faceoffsWonTeam2 = team_statistics[team2Id][faceoffsWon] / (team_statistics[team2Id][faceoffsWon] + team_statistics[team2Id][faceoffsLose])
         vector.append(faceoffsWonTeam1 - faceoffsWonTeam2)
 
         z = vector + y
@@ -324,6 +360,8 @@ def processEvent(event):
     if team1WonGame:
         team_statistics[team1Id][winning_strike] += 1
         team_statistics[team2Id][winning_strike] = 0
+        team_statistics[team1Id][homeWin]  += 1
+        team_statistics[team2Id][awayLose] += 1
         if overtime_was:
             team_statistics[team1Id][team_score] += 2
             team_statistics[team2Id][team_score] += 1
@@ -332,6 +370,8 @@ def processEvent(event):
     else:
          team_statistics[team2Id][winning_strike] += 1
          team_statistics[team1Id][winning_strike] = 0
+         team_statistics[team1Id][homeLose] += 1
+         team_statistics[team2Id][awayWin]  += 1
          if overtime_was:
             team_statistics[team2Id][team_score] += 2
             team_statistics[team1Id][team_score] += 1
@@ -364,13 +404,19 @@ def processEvent(event):
     team_statistics[team2Id][overtime_against]      += team1OvScored
 
 
-    # shots
-    team_statistics[team1Id][shotsPeriod1] += getNum(event, shotsPeriod1Team1)
-    team_statistics[team2Id][shotsPeriod1] += getNum(event, shotsPeriod1Team2)
-    team_statistics[team1Id][shotsPeriod2] += getNum(event, shotsPeriod2Team1)
-    team_statistics[team2Id][shotsPeriod2] += getNum(event, shotsPeriod2Team2)
-    team_statistics[team1Id][shotsPeriod3] += getNum(event, shotsPeriod3Team1)
-    team_statistics[team2Id][shotsPeriod3] += getNum(event, shotsPeriod3Team2)
+    # fenwik
+    team_statistics[team1Id][fenwikPeriod1]        += getNum(event, shotsPeriod1Team1) - getNum(event, blockedShotsPeriod1Team2)
+    team_statistics[team1Id][fenwikPeriod1Against] += getNum(event, shotsPeriod1Team2) - getNum(event, blockedShotsPeriod1Team1)
+    team_statistics[team2Id][fenwikPeriod1]        += getNum(event, shotsPeriod1Team2) - getNum(event, blockedShotsPeriod1Team1)
+    team_statistics[team2Id][fenwikPeriod1Against] += getNum(event, shotsPeriod1Team1) - getNum(event, blockedShotsPeriod1Team2)
+    team_statistics[team1Id][fenwikPeriod2]        += getNum(event, shotsPeriod2Team1) - getNum(event, blockedShotsPeriod1Team2)
+    team_statistics[team1Id][fenwikPeriod2Against] += getNum(event, shotsPeriod2Team2) - getNum(event, blockedShotsPeriod1Team1)
+    team_statistics[team2Id][fenwikPeriod2]        += getNum(event, shotsPeriod2Team2) - getNum(event, blockedShotsPeriod1Team1)
+    team_statistics[team2Id][fenwikPeriod2Against] += getNum(event, shotsPeriod2Team1) - getNum(event, blockedShotsPeriod1Team2)
+    team_statistics[team1Id][fenwikPeriod3]        += getNum(event, shotsPeriod3Team1) - getNum(event, blockedShotsPeriod1Team2)
+    team_statistics[team1Id][fenwikPeriod3Against] += getNum(event, shotsPeriod3Team2) - getNum(event, blockedShotsPeriod1Team1)
+    team_statistics[team2Id][fenwikPeriod3]        += getNum(event, shotsPeriod3Team2) - getNum(event, blockedShotsPeriod1Team1)
+    team_statistics[team2Id][fenwikPeriod3Against] += getNum(event, shotsPeriod3Team1) - getNum(event, blockedShotsPeriod1Team2)
 
     # shots on goal
     team_statistics[team1Id][shotsOnGoalPeriod1]  += getNum(event, shotsOnGoalPeriod1Team1)
@@ -403,12 +449,10 @@ def processEvent(event):
     team_statistics[team2Id][hitsPeriod3] += getNum(event, hitsPeriod3Team2)
 
     # вбрасывания
-    team_statistics[team1Id][faceoffsWonPeriod1] += getNum(event, faceoffsWonPeriod1Team1)
-    team_statistics[team2Id][faceoffsWonPeriod1] += getNum(event, faceoffsWonPeriod1Team2)
-    team_statistics[team1Id][faceoffsWonPeriod2] += getNum(event, faceoffsWonPeriod2Team1)
-    team_statistics[team2Id][faceoffsWonPeriod2] += getNum(event, faceoffsWonPeriod2Team2)
-    team_statistics[team1Id][faceoffsWonPeriod3] += getNum(event, faceoffsWonPeriod3Team1)
-    team_statistics[team2Id][faceoffsWonPeriod3] += getNum(event, faceoffsWonPeriod3Team2)
+    team_statistics[team1Id][faceoffsWon]  += getNum(event, faceoffsWonPeriod1Team1) + getNum(event, faceoffsWonPeriod2Team1) + getNum(event, faceoffsWonPeriod3Team1)
+    team_statistics[team1Id][faceoffsLose] += getNum(event, faceoffsWonPeriod1Team2) + getNum(event, faceoffsWonPeriod2Team2) + getNum(event, faceoffsWonPeriod3Team2)
+    team_statistics[team2Id][faceoffsWon]  += getNum(event, faceoffsWonPeriod1Team2) + getNum(event, faceoffsWonPeriod2Team2) + getNum(event, faceoffsWonPeriod3Team2)
+    team_statistics[team2Id][faceoffsLose] += getNum(event, faceoffsWonPeriod1Team1) + getNum(event, faceoffsWonPeriod2Team1) + getNum(event, faceoffsWonPeriod3Team1)
 
     # игра в большинстве
     team_statistics[team1Id][powerplayTimes] += getNum(event, powerplayTimesTeam1)
@@ -440,6 +484,11 @@ def main():
     events.sort(key = lambda x : int(x[0]))
     for event in events:
         processEvent(event)
+
+#    for i in range(29):
+#        if i != 11:
+
+
 
 if __name__ == '__main__':
     main()
