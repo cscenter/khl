@@ -6,11 +6,9 @@ from scrapy.contrib.spiders import CrawlSpider, Rule
 from scrapy.contrib.linkextractors.sgml import SgmlLinkExtractor
 from scrapy.contrib.loader.processor import TakeFirst
 from scrapy.contrib.loader.processor import MapCompose
-from scrapy.contrib.loader.processor import Compose
 from scrapy.contrib.loader import XPathItemLoader
 from scrapy.selector import HtmlXPathSelector
 from khl.items import KhlItem
-import json
 
 
 class KhlLoader(XPathItemLoader):
@@ -21,7 +19,8 @@ class KhlLoader(XPathItemLoader):
 class KhlSpider(CrawlSpider):
     name = "khl"
     allowed_domains = ["khl.ru"]    
-    start_urls = ["http://www.khl.ru/calendar/309/00/"] # календарь всех игр 2015-2016 сезона
+    #start_urls = ["http://www.khl.ru/calendar/309/00/"] # календарь всех игр 2015-2016 сезона
+    start_urls = ["http://www.khl.ru/game/309/46649/protocol/"] # календарь всех игр 2015-2016 сезона
 
     rules = (
              Rule(SgmlLinkExtractor(allow=('/protocol')), callback='parse_item'),
@@ -41,19 +40,19 @@ class KhlSpider(CrawlSpider):
     faceoffsWonPeriod3Team2 = '-1'
 
     def extractFromLive(self, items, broski, faceoff, statistics_after_1_period, statistics_after_2_period, statistics_after_3_period):
-         global shotsPeriod1Team1
-         global shotsPeriod1Team2
-         global shotsPeriod2Team1
-         global shotsPeriod2Team2
-         global shotsPeriod3Team1
-         global shotsPeriod3Team2
-         global faceoffsWonPeriod1Team1
-         global faceoffsWonPeriod1Team2
-         global faceoffsWonPeriod2Team1
-         global faceoffsWonPeriod2Team2
-         global faceoffsWonPeriod3Team1
-         global faceoffsWonPeriod3Team2
-         for item in items:
+        global shotsPeriod1Team1
+        global shotsPeriod1Team2
+        global shotsPeriod2Team1
+        global shotsPeriod2Team2
+        global shotsPeriod3Team1
+        global shotsPeriod3Team2
+        global faceoffsWonPeriod1Team1
+        global faceoffsWonPeriod1Team2
+        global faceoffsWonPeriod2Team1
+        global faceoffsWonPeriod2Team2
+        global faceoffsWonPeriod3Team1
+        global faceoffsWonPeriod3Team2
+        for item in items:
             pos = item.find(statistics_after_1_period)
             if pos != -1:
                 only_useful = item[pos:]
@@ -128,11 +127,11 @@ class KhlSpider(CrawlSpider):
         faceoffsWonPeriod3Team2 = '-1'
 
         # javascript
-        extractFromLive(items, u'Броски', u'Вбрасывания', u'Статистика 1-го периода', u'Статистика 2-го периода', u'Статистика 3-го периода')
-        extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1st period', u'Stats of 2nd period', u'Stats of 3rd period')
-        extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1-st period', u'Stats of 2-nd period', u'Stats of 3-rd period')
-        extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1-st period', u'Stats of 2-st period', u'Stats of 3-st period')
-        extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1st period', u'Stats of 2st period', u'Stats of 3st period')
+        self.extractFromLive(items, u'Броски', u'Вбрасывания', u'Статистика 1-го периода', u'Статистика 2-го периода', u'Статистика 3-го периода')
+        self.extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1st period', u'Stats of 2nd period', u'Stats of 3rd period')
+        self.extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1-st period', u'Stats of 2-nd period', u'Stats of 3-rd period')
+        self.extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1-st period', u'Stats of 2-st period', u'Stats of 3-st period')
+        self.extractFromLive(items, u'Shots', u'Faceoffs won', u'Stats of 1st period', u'Stats of 2st period', u'Stats of 3st period')
 
         # уже не javascript
         statistics_after_1_period = u'Статистика 1-го периода'

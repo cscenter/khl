@@ -63,4 +63,32 @@ class KhlItem(Item):
     against5vs5Team1              = Field() # пропущенные шайбы первой командой в полном составе, количество
     against5vs5Team2              = Field() # пропущенные шайбы второй командой в полном составе, количество
     url                           = Field() # url странички откуда получены данные
+    
+class KhlPlayerItem(Item):
+    id                            = Field() # id игрока на khl.ru
+    name                          = Field() # Как зовут игрока(фамилия и имя)
+    id_match                      = Field() # номер матча на khl.ru - там они пронумерованы по возрастанию даты
+    url                           = Field() # url странички откуда получены данные    
+    
+    # Вратари
+    shots_attemped                = Field() # бросков нанесено в створ
+    goal_allowed                  = Field() # шайб пропущено
+    shotout                       = Field() # сухих игр
+    played_time                   = Field() # время на площадке (для защ и напов тоже)
+    
+    # Защитники и нападающие 
+    goals                         = Field() # голы
+    asists                        = Field() # голвевых передач
+    plusminus                     = Field() # плюс-минус
+    penalty                       = Field() # штрафное время в минутах
+    win_goals                     = Field() # победные шайбы
+    shots_on_goal                 = Field() # бросков нанесено в створ  
+    faceoffs                      = Field() # вбрасываний всего
+    faceoffs_win                  = Field() # вбрасываний выиграно
+    hits                          = Field() # силовые приёмы
+    shots_blocked                 = Field() # блокировано бросков
+    
+    
+    
+    #goaltenders
         
