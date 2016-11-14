@@ -30,6 +30,10 @@ class KhlSpider(CrawlSpider):
     id_pattern = re.compile("players/[0-9]+", re.IGNORECASE)
     name_pattern = re.compile("players/.*", re.IGNORECASE)
     
+    goalkepeer = 'goalkepeer'
+    defender = 'defender'
+    forward = 'forward'
+    
     def get_js_var(self, data):
         data_new = data[0].split("= ", 1)[1]
         data_new = data_new[:data_new.find(";") - 1]
@@ -38,7 +42,7 @@ class KhlSpider(CrawlSpider):
         data_new += ']' 
         return data_new
              
-    def process(self, hxs, j, is_goalkeeper, response):
+    def process(self, hxs, j, role, team, response):
         item = KhlPlayerItem()
         l = KhlPlayersLoader(item, hxs)
         l.add_xpath('id_match', '//span[re:test(@class, "e-num")]/text()')
@@ -48,7 +52,7 @@ class KhlSpider(CrawlSpider):
         name = name.encode('utf-8') 
         l.add_value('name', name)        
         l.add_value('url', response.url)
-        if is_goalkeeper: # для вратарей       
+        if role == self.goalkepeer: # для вратарей       
             l.add_value('shots_attemped', str(j[6]))
             l.add_value('goal_allowed', str(j[7]))
             l.add_value('shotout', str(j[13]))
@@ -65,6 +69,8 @@ class KhlSpider(CrawlSpider):
             l.add_value('hits', str(j[21]))
             l.add_value('shots_blocked', str(j[22]))
             l.add_value('played_time', str(j[19]))
+        l.add_value('role', role)    
+        l.add_value('team', str(team))
         return l.load_item()                 
 
     def parse_item(self, response):
@@ -80,21 +86,27 @@ class KhlSpider(CrawlSpider):
         data_goalies_B = response.xpath('//script[contains(.,"var data_goalies_B")]/text()').re(".*var.*")
         jsA = json.loads(self.get_js_var(data_goalies_A))
         jsB = json.loads(self.get_js_var(data_goalies_B))
-        for j in jsA + jsB:
-            yield self.process(hxs, j, True, response)
+        for j in jsA:
+            yield self.process(hxs, j, self.goalkepeer, 1, response)
+        for j in jsB:
+            yield self.process(hxs, j, self.goalkepeer, 2, response)    
             
         data_defenses_A = response.xpath('//script[contains(.,"var data_defenses_A")]/text()').re(".*var.*")
         data_defenses_B = response.xpath('//script[contains(.,"var data_defenses_B")]/text()').re(".*var.*")
         jsA = json.loads(self.get_js_var(data_defenses_A))
         jsB = json.loads(self.get_js_var(data_defenses_B))
-        for j in jsA + jsB:
-            yield self.process(hxs, j, False, response)    
-        
+        for j in jsA:
+            yield self.process(hxs, j, self.defender, 1, response)    
+        for j in jsB:
+            yield self.process(hxs, j, self.defender, 2, response)    
+            
         data_forwards_A = response.xpath('//script[contains(.,"var data_forwards_A")]/text()').re(".*var.*")
         data_forwards_B = response.xpath('//script[contains(.,"var data_forwards_B")]/text()').re(".*var.*")
         jsA = json.loads(self.get_js_var(data_forwards_A))
         jsB = json.loads(self.get_js_var(data_forwards_B))
-        for j in jsA + jsB:
-            yield self.process(hxs, j, False, response)   
+        for j in jsA:
+            yield self.process(hxs, j, self.forward, 1, response)   
+        for j in jsB:
+            yield self.process(hxs, j, self.forward, 2, response)    
 
        # return l.load_item()

@@ -68,7 +68,9 @@ class KhlPlayerItem(Item):
     id                            = Field() # id игрока на khl.ru
     name                          = Field() # Как зовут игрока(фамилия и имя)
     id_match                      = Field() # номер матча на khl.ru - там они пронумерованы по возрастанию даты
-    url                           = Field() # url странички откуда получены данные    
+    url                           = Field() # url странички откуда получены данные  
+    team                          = Field() # команда - 1 или 2
+    role                          = Field() # вратарь, защитник или нападающий
     
     # Вратари
     shots_attemped                = Field() # бросков нанесено в створ
